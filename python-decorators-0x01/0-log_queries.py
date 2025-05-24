@@ -3,8 +3,8 @@ import functools
 
 #### decorator to lof SQL queries
 
-def log_queries(fetch_all_users):
-	@functools.wraps(fetch_all_users)
+def log_queries(func):
+	@functools.wraps(func)
 	def wrapper(*args, **kwargs):
 		# Check if query is passed positionally or as a keyword
 		if args:
@@ -13,8 +13,8 @@ def log_queries(fetch_all_users):
 			query = kwargs['query']
 		else:
 			query = "<NO QUERY FOUND>"
-		print(f"SQL Query: {query}")
-		return fetch_all_users(*args, **kwargs)
+		print(f"[{datetime.now()}] SQL Query: {query}")
+		return func(*args, **kwargs)
 	return wrapper
 
 @log_queries
