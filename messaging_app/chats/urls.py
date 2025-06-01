@@ -7,6 +7,11 @@ router = DefaultRouter()
 router.register('conversations', ConversationViewSet, basename='conversation')
 router.register('messages', MessageViewSet, basename='message')
 
+nested_router = NestedDefaultRouter(router, r'conversations', lookup='conversation')
+nested_router.register(r'messages', MessageViewSet, basename='conversation-messages')
+
+
 urlpatterns = [
-    path('api/', include(router.urls)),
+    path('', include(router.urls)),
+    path('', include(nested_router.urls)),
 ]
