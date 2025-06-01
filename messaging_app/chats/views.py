@@ -1,39 +1,34 @@
-from rest_framework import viewsets, status
+from rest_framework import viewsets, filters, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
-from .models import Conversation, Message, User
-from .serializers import (
-    ConversationSerializer,
-    ConversationCreateSerializer,
-    MessageSerializer,
-)
-from rest_framework.permissions import IsAuthenticated
+from django.shortcuts import get_object_or_404
 
+from .models import Conversation, Message
+from .serializers import ConversationSerializer, MessageSerializer
 
 class ConversationViewSet(viewsets.ModelViewSet):
     queryset = Conversation.objects.all()
-    permission_classes = [IsAuthenticated]
+    serializer_class = ConversationSerializer
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['participants__first_name', 'participants__last_name']
 
-    def get_serializer_class(self):
-        if self.action == 'create':
-            return ConversationCreateSerializer
-        return ConversationSerializer
-
-    def perform_create(self, serializer):
-        conversation = serializer.save()
-        # optionally add the creator as a participant
-        # conversation.participants.add(self.request.user)
+    def create(self, request, *args, **kwargs):
+        # Custom create to handle participants and validation
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 class MessageViewSet(viewsets.ModelViewSet):
     queryset = Message.objects.all()
     serializer_class = MessageSerializer
-    permission_classes = [IsAuthenticated]
 
     def create(self, request, *args, **kwargs):
-        # Expect 'conversation' and 'content' in POST data, sender from request.user
-        data = request.data.copy()
-        data['sender'] = request.user.id
-        serializer = self.get_serializer(data=data)
+        # Ensure conversation exists before creating message
+        conversation_id = request.data.get('conversation')
+        conversation = get_object_or_404(Conversation, pk=conversation_id)
+
+        serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        serializer.save(conversation=conversation)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
