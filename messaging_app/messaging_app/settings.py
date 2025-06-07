@@ -58,7 +58,6 @@ TEMPLATES = [
 WSGI_APPLICATION = 'messaging_app.wsgi.application'
 
 # Database
-# Replace with your actual database configuration
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -84,7 +83,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # Internationalization
 LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'UTC'  # Adjust as needed
+TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_L10N = True
 USE_TZ = True
