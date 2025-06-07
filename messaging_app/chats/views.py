@@ -1,61 +1,35 @@
-from rest_framework import viewsets, status, filters
-from rest_framework.response import Response
+from rest_framework import viewsets, status
 from rest_framework.permissions import IsAuthenticated
-from .models import Conversation, Message, user
-from .serializers import ConversationSerializer, MessageSerializer
-from django.shortcuts import get_object_or_404
-
-
-class ConversationViewSet(viewsets.ModelViewSet):
-    serializer_class = ConversationSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [filters.OrderingFilter]
-    ordering_fields = ['created_at']
-    ordering = ['-created_at']
-
-    def get_queryset(self):
-        return Conversation.objects.filter(participants=self.request.user).distinct()
-
-    def create(self, request, *args, **kwargs):
-        participant_ids = request.data.get('participant_ids', [])
-        if not participant_ids:
-            return Response({'error': 'At least one participant is required.'}, status=400)
-
-        participants = user.objects.filter(user_id__in=participant_ids)
-        if not participants:
-            return Response({'error': 'No valid users found.'}, status=400)
-
-        conversation = Conversation.objects.create()
-        conversation.participants.add(*participants, request.user)
-        serializer = self.get_serializer(conversation)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-
+from rest_framework.response import Response
+from rest_framework.exceptions import PermissionDenied
+from .models import Message, Conversation
+from .serializers import MessageSerializer
+from .permissions import IsParticipantOfConversation
 
 class MessageViewSet(viewsets.ModelViewSet):
     serializer_class = MessageSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [filters.OrderingFilter, filters.SearchFilter]
-    ordering_fields = ['sent_at']
-    ordering = ['sent_at']
-    search_fields = ['message_body']
+    permission_classes = [IsAuthenticated, IsParticipantOfConversation]
 
     def get_queryset(self):
-        conversation_id = self.kwargs.get('conversation_pk')
-        conversation = get_object_or_404(Conversation, conversation_id=conversation_id, participants=self.request.user)
-        return conversation.messages.order_by('sent_at')
+        conversation_id = self.request.query_params.get('conversation_id')
 
-    def create(self, request, *args, **kwargs):
-        conversation_id = self.kwargs.get('conversation_pk')
-        conversation = get_object_or_404(Conversation, conversation_id=conversation_id, participants=request.user)
+        if not conversation_id:
+            return Message.objects.none()
 
-        message_body = request.data.get('message_body')
-        if not message_body:
-            return Response({'error': 'Message body is required.'}, status=400)
+        try:
+            conversation = Conversation.objects.get(id=conversation_id)
+        except Conversation.DoesNotExist:
+            return Message.objects.none()
 
-        message = Message.objects.create(
-            sender=request.user,
-            conversation=conversation,
-            message_body=message_body
-        )
-        serializer = self.get_serializer(message)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        if self.request.user not in conversation.participants.all():
+            raise PermissionDenied(detail="You are not a participant of this conversation.")
+
+        return Message.objects.filter(conversation=conversation)
+
+    def perform_create(self, serializer):
+        conversation = serializer.validated_data['conversation']
+
+        if self.request.user not in conversation.participants.all():
+            raise PermissionDenied(detail="You are not a participant of this conversation.")
+
+        serializer.save(user=self.request.user)
