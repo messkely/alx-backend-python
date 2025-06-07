@@ -1,9 +1,10 @@
-from rest_framework import permissions
+from rest_framework.permissions import BasePermission, IsAuthenticated
 
-class IsOwner(permissions.BasePermission):
+class IsParticipantOfConversation(BasePermission):
     """
-    Custom permission to only allow owners of an object to access it.
+    Custom permission to only allow participants of a conversation to access it.
     """
 
     def has_object_permission(self, request, view, obj):
-        return obj.user == request.user
+        # Assumes the object has a 'participants' ManyToManyField
+        return request.user in obj.participants.all()
