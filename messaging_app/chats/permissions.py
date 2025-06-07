@@ -1,10 +1,16 @@
-from rest_framework.permissions import BasePermission, IsAuthenticated
+from rest_framework import permissions
+from .models import Conversation
 
-class IsParticipantOfConversation(BasePermission):
+class IsParticipantOfConversation(permissions.BasePermission):
     """
-    Custom permission to only allow participants of a conversation to access it.
+    Custom permission to allow only participants of a conversation
+    to access related messages or the conversation itself.
     """
 
     def has_object_permission(self, request, view, obj):
-        # Assumes the object has a 'participants' ManyToManyField
-        return request.user in obj.participants.all()
+        # If the object is a Message, get its conversation
+        conversation = getattr(obj, 'conversation', obj)
+        return request.user in conversation.participants.all()
+
+    def has_permission(self, request, view):
+        return request.user and request.user.is_authenticated
