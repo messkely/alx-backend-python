@@ -15,7 +15,6 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
@@ -27,23 +26,30 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
-
 # Application definition
-
-INSTALLED_APPS = [
+DJANGO_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+]
+
+THIRD_PARTY_APPS = [
     'rest_framework',
-    'chats',
     'rest_framework_simplejwt',
     'django_filters',
 ]
 
-MIDDLEWARE = [
+LOCAL_APPS = [
+    'chats',
+]
+
+INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
+
+# Django core middleware
+DJANGO_MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -51,12 +57,17 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+]
+
+# Custom middleware
+CUSTOM_MIDDLEWARE = [
     'chats.middleware.RequestLoggingMiddleware',
     'chats.middleware.RestrictAccessByTimeMiddleware',
     'chats.middleware.OffensiveLanguageMiddleware',
     'chats.middleware.RolepermissionMiddleware',
-
 ]
+
+MIDDLEWARE = DJANGO_MIDDLEWARE + CUSTOM_MIDDLEWARE
 
 ROOT_URLCONF = 'Django-Middleware-0x03.urls'
 
@@ -77,10 +88,8 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'Django-Middleware-0x03.wsgi.application'
 
-
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
-
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -91,80 +100,80 @@ DATABASES = {
     }
 }
 
-
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
-
-AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
+PASSWORD_VALIDATORS = [
+    'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+    'django.contrib.auth.password_validation.MinimumLengthValidator',
+    'django.contrib.auth.password_validation.CommonPasswordValidator',
+    'django.contrib.auth.password_validation.NumericPasswordValidator',
 ]
 
+AUTH_PASSWORD_VALIDATORS = [{'NAME': validator} for validator in PASSWORD_VALIDATORS]
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
-
 LANGUAGE_CODE = 'en-us'
-
 TIME_ZONE = 'UTC'
-
 USE_I18N = True
-
 USE_TZ = True
-
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
-
 STATIC_URL = 'static/'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
-
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Django REST Framework Configuration
+REST_FRAMEWORK_PERMISSIONS = [
+    'rest_framework.permissions.IsAuthenticated',
+]
+
+REST_FRAMEWORK_AUTHENTICATION = [
+    'rest_framework_simplejwt.authentication.JWTAuthentication',
+    'rest_framework.authentication.SessionAuthentication',
+    'rest_framework.authentication.BasicAuthentication',
+    # Optionally, you can include TokenAuthentication or JWTAuthentication if needed
+    # 'rest_framework.authentication.TokenAuthentication',
+]
+
+REST_FRAMEWORK_FILTERS = [
+    'django_filters.rest_framework.DjangoFilterBackend',
+]
+
+# Pagination settings
+DEFAULT_PAGE_SIZE = 20
+
 REST_FRAMEWORK = {
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
-    ],
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
-        'rest_framework.authentication.BasicAuthentication',
-        # Optionally, you can include TokenAuthentication or JWTAuthentication if needed
-        # 'rest_framework.authentication.TokenAuthentication',
-    ],
-    'DEFAULT_FILTER_BACKENDS': (
-        'django_filters.rest_framework.DjangoFilterBackend',
-    ),
+    'DEFAULT_PERMISSION_CLASSES': REST_FRAMEWORK_PERMISSIONS,
+    'DEFAULT_AUTHENTICATION_CLASSES': REST_FRAMEWORK_AUTHENTICATION,
+    'DEFAULT_FILTER_BACKENDS': REST_FRAMEWORK_FILTERS,
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 20
+    'PAGE_SIZE': DEFAULT_PAGE_SIZE
 }
 
+# Custom User Model
 AUTH_USER_MODEL = 'chats.User'
 
-# JWT settings
-"""
-overriding the default user ID field and claim for JWT
-"""
+# JWT Configuration
+# Overriding the default user ID field and claim for JWT
+JWT_USER_ID_FIELD = 'username'
+JWT_USER_ID_CLAIM = 'user_id'
+
 SIMPLE_JWT = {
-    'USER_ID_FIELD': 'username',
-    'USER_ID_CLAIM': 'user_id',
+    'USER_ID_FIELD': JWT_USER_ID_FIELD,
+    'USER_ID_CLAIM': JWT_USER_ID_CLAIM,
 }
+
+# Cache Configuration
+CACHE_BACKEND = "django.core.cache.backends.locmem.LocMemCache"
+CACHE_LOCATION = "unique-rate-limit"
 
 CACHES = {
     "default": {
-        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-        "LOCATION": "unique-rate-limit"
+        "BACKEND": CACHE_BACKEND,
+        "LOCATION": CACHE_LOCATION
     }
 }

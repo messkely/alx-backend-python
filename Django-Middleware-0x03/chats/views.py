@@ -1,63 +1,41 @@
-from .pagination import MessagePagination
-from .filters import MessageFilter
-from rest_framework import permissions, viewsets, status
+from rest_framework import viewsets, status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework import pagination
-from .models import User, Conversation, Message
-from .serializers import UserSerializer, ConversationSerializer, MessageSerializer
-from .permissions import IsSender, IsParticipantOfConversation
-from django_filters import rest_framework as filters
-
-
-class ConversationViewSet(viewsets.ModelViewSet):
-    queryset = Conversation.objects.all()
-    serializer_class = ConversationSerializer
-    permission_classes = [permissions.IsAuthenticated,
-                          IsSender, IsParticipantOfConversation]
-    filter_backends = [filters.DjangoFilterBackend]
-    filterset_fields = ['participants', 'created_at']
-    ordering_fields = ['sent_at']
-
-    def create(self, request, *args, **kwargs):
-        participants = request.data.get("participants", [])
-        if not participants:
-            return Response(
-                {"detail": "Participants list cannot be empty."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        user_id_str = str(request.user.user_id)  # Ensure user_id is a string
-        if user_id_str not in participants:
-            return Response(
-                {"detail": "You must be one of the participants to create this conversation."},
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        return super().create(request, *args, **kwargs)
-
-    def get_queryset(self):
-        return Conversation.objects.filter(participants=self.request.user).order_by('-created_at')
-
+from rest_framework.exceptions import APIException
+from .models import Message, Conversation
+from .serializers import MessageSerializer
+from .permissions import IsParticipantOfConversation
 
 class MessageViewSet(viewsets.ModelViewSet):
-    queryset = Message.objects.all()
     serializer_class = MessageSerializer
-    permission_classes = [permissions.IsAuthenticated, IsSender]
-    pagination_class = MessagePagination
-    filter_backends = (filters.DjangoFilterBackend,)
-    filter_class = MessageFilter
+    permission_classes = [IsAuthenticated, IsParticipantOfConversation]
 
     def get_queryset(self):
-        conversation_id = self.kwargs["conversation_pk"]
-        return Message.objects.filter(conversation_id=conversation_id).order_by('-sent_at')
+        conversation_id = self.request.query_params.get('conversation_id')
+
+        if not conversation_id:
+            return Message.objects.none()
+
+        try:
+            conversation = Conversation.objects.get(id=conversation_id)
+        except Conversation.DoesNotExist:
+            return Message.objects.none()
+
+        if self.request.user not in conversation.participants.all():
+            raise APIException(
+                detail="You are not a participant of this conversation.",
+                code=status.HTTP_403_FORBIDDEN
+            )
+
+        return Message.objects.filter(conversation=conversation)
 
     def perform_create(self, serializer):
-        conversation_id = self.kwargs["conversation_pk"]
-        conversation = Conversation.objects.get(pk=conversation_id)
-        serializer.save(sender=self.request.user, conversation=conversation)
+        conversation = serializer.validated_data['conversation']
 
-    # def create(self, request, *args, **kwargs):
-    #     response = super().create(request, *args, **kwargs)
-    #     return Response(response.data, status=status.HTTP_201_CREATED)
+        if self.request.user not in conversation.participants.all():
+            raise APIException(
+                detail="You are not a participant of this conversation.",
+                code=status.HTTP_403_FORBIDDEN
+            )
 
-    # def get_queryset(self):
-    #     return Message.objects.filter(sender=self.request.user)
+        serializer.save(user=self.request.user)

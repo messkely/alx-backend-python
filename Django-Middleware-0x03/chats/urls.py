@@ -1,17 +1,11 @@
+from django.contrib import admin
 from django.urls import path, include
-from rest_framework import routers
-from rest_framework_nested import routers as nested_routers
-from .views import ConversationViewSet, MessageViewSet
-
-router = routers.DefaultRouter()
-router.register(r'conversations', ConversationViewSet, basename='conversation')
-
-nested_router = nested_routers.NestedDefaultRouter(
-    router, r'conversations', lookup='conversation')
-nested_router.register(r'messages', MessageViewSet,
-                       basename='conversation-messages')
+from rest_framework_simplejwt.views import TokenRefreshView
+from chats.auth import CustomTokenObtainPairView
 
 urlpatterns = [
-    path('', include(router.urls)),
-    path('', include(nested_router.urls)),
+    path('admin/', admin.site.urls),
+    path('api/token/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/', include('chats.urls')),  # Include your app's URLs
 ]
