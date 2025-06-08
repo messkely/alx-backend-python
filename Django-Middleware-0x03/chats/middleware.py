@@ -1,85 +1,84 @@
-import logging
+import datetime
 import time
-from datetime import datetime, time as dt_time
+import logging
 from django.http import HttpResponseForbidden
 
 # Configure logging
-logger = logging.getLogger(__name__)
-handler = logging.FileHandler('requests.log')
-formatter = logging.Formatter('%(asctime)s - %(message)s')
-handler.setFormatter(formatter)
-logger.addHandler(handler)
-logger.setLevel(logging.INFO)
+logging.basicConfig(
+    filename='requests.log',
+    level=logging.INFO,
+    format='%(asctime)s - %(message)s',
+    datefmt='%Y-%m-%dT%H:%M:%S'
+)
 
 class RequestLoggingMiddleware:
     """
-    Logs each user's request with timestamp, user, and request path.
+    Logs user requests with timestamp, user, and request path.
     """
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
-        user = request.user if request.user.is_authenticated else 'Anonymous'
-        logger.info(f"User: {user} - Path: {request.path}")
-        response = self.get_response(request)
-        return response
+        user = request.user.username if request.user.is_authenticated else 'Anonymous'
+        logging.info(f"User: {user} - Path: {request.path}")
+        return self.get_response(request)
+
 
 class RestrictAccessByTimeMiddleware:
     """
-    Restricts access to the chat application outside 6 PM to 9 PM.
+    Restricts chat access outside the allowed time window (9 AM to 6 PM).
     """
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
-        current_time = datetime.now().time()
-        start_time = dt_time(18, 0)  # 6 PM
-        end_time = dt_time(21, 0)    # 9 PM
-
-        if not (start_time <= current_time <= end_time):
-            return HttpResponseForbidden("Access to the chat is restricted during this time.")
-
+        now = datetime.datetime.now().time()
+        start_time = datetime.time(9, 0)
+        end_time = datetime.time(18, 0)
+        if now < start_time or now >= end_time:
+            return HttpResponseForbidden("Access to the messaging app is only allowed between 9 AM and 6 PM.")
         return self.get_response(request)
+
 
 class OffensiveLanguageMiddleware:
     """
-    Limits the number of chat messages a user can send within a certain time window, based on their IP address.
+    Limits number of POST requests to 5 per minute per IP address.
+    (Used to simulate offensive language prevention via rate limiting.)
     """
     def __init__(self, get_response):
         self.get_response = get_response
-        self.ip_message_times = {}
+        self.ip_message_log = {}
 
     def __call__(self, request):
         if request.method == 'POST':
             ip = self.get_client_ip(request)
-            now = time.time()
-            window = 60  # 1 minute
-            limit = 5
+            current_time = time.time()
+            window_seconds = 60
+            max_messages = 5
 
-            times = self.ip_message_times.get(ip, [])
-            # Remove timestamps older than 1 minute
-            times = [t for t in times if now - t < window]
+            timestamps = self.ip_message_log.get(ip, [])
+            # Clean up timestamps older than 1 minute
+            timestamps = [t for t in timestamps if current_time - t < window_seconds]
 
-            if len(times) >= limit:
-                return HttpResponseForbidden("Too many messages sent. Please wait a moment before sending more.")
+            if len(timestamps) >= max_messages:
+                return HttpResponseForbidden("Rate limit exceeded. Please wait before sending more messages.")
 
-            times.append(now)
-            self.ip_message_times[ip] = times
+            timestamps.append(current_time)
+            self.ip_message_log[ip] = timestamps
 
         return self.get_response(request)
 
     def get_client_ip(self, request):
         x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
         if x_forwarded_for:
-            ip = x_forwarded_for.split(',')[0]
-        else:
-            ip = request.META.get('REMOTE_ADDR')
-        return ip
+            return x_forwarded_for.split(',')[0]
+        return request.META.get('REMOTE_ADDR')
+
 
 class RolePermissionMiddleware:
     """
-    Checks the user's role before allowing access to specific actions.
-    Only users with 'admin' or 'moderator' roles are permitted.
+    Allows only admin or moderator users to access certain resources.
+    Returns 403 Forbidden for unauthorized users.
     """
     def __init__(self, get_response):
         self.get_response = get_response
