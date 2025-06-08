@@ -1,11 +1,17 @@
-import django_filters
+from django_filters import rest_framework as filters
 from .models import Message
 
-class MessageFilter(django_filters.FilterSet):
-    start_date = django_filters.DateTimeFilter(field_name="timestamp", lookup_expr='gte')
-    end_date = django_filters.DateTimeFilter(field_name="timestamp", lookup_expr='lte')
-    sender = django_filters.CharFilter(field_name="sender__username", lookup_expr='iexact')
+
+class MessageFilter(filters.FilterSet):
+    """FilterSet for filtering messages based on sender, conversation, and sent_at date range.
+    This filter allows users to filter messages by the sender's username, the conversation ID,  
+    and a range of sent_at timestamps.
+    """
+    sender = filters.UUIDFilter(field_name='sender', lookup_expr='exact')
+    conversation = filters.UUIDFilter(
+        field_name='conversation', lookup_expr='exact')
+    sent_at = filters.DateTimeFromToRangeFilter(field_name='sent_at')
 
     class Meta:
         model = Message
-        fields = ['start_date', 'end_date', 'sender']
+        fields = ['sender', 'conversation', 'sent_at']
