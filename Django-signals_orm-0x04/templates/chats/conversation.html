@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="conversation">
+    <h2>Conversation with {{ other_user.username }}</h2>
+    
+    {% for message in messages %}
+        <div class="message {% if message.sender == request.user %}sent{% else %}received{% endif %}">
+            <div class="message-header">
+                <strong>{{ message.sender.username }}</strong>
+                <span class="timestamp">{{ message.timestamp|date:"M d, Y H:i" }}</span>
+                {% if message.edited %}<span class="edited">(edited)</span>{% endif %}
+            </div>
+            <div class="message-content">{{ message.content }}</div>
+            
+            {% if message.replies.exists %}
+                <div class="replies">
+                    {% for reply in message.replies.all %}
+                        <div class="reply">
+                            <strong>{{ reply.sender.username }}:</strong> {{ reply.content }}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+    {% endfor %}
+</div>
+{% endblock %}

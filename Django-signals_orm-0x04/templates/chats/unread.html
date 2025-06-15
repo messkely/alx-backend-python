@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="unread-messages">
+    <h2>Unread Messages ({{ unread_count }})</h2>
+    
+    {% for message in unread_messages %}
+        <div class="unread-message">
+            <div class="message-header">
+                <strong>From: {{ message.sender.username }}</strong>
+                <span class="timestamp">{{ message.timestamp|date:"M d, Y H:i" }}</span>
+            </div>
+            <div class="message-preview">{{ message.content|truncatewords:20 }}</div>
+        </div>
+    {% endfor %}
+</div>
+{% endblock %}
