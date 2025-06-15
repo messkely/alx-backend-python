@@ -15,6 +15,11 @@ class Message(models.Model):
 
     class Meta:
         ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['sender', 'receiver']),
+            models.Index(fields=['receiver', 'read']),
+            models.Index(fields=['timestamp']),
+        ]
 
     def __str__(self):
         return f"Message from {self.sender.username} to {self.receiver.username}"
@@ -28,6 +33,10 @@ class Notification(models.Model):
 
     class Meta:
         ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['user', 'read']),
+            models.Index(fields=['timestamp']),
+        ]
 
     def __str__(self):
         return f"Notification for {self.user.username}: {self.content}"
