@@ -1,6 +1,7 @@
 from django.db.models.signals import post_save, pre_save, post_delete
 from django.dispatch import receiver
 from django.contrib.auth.models import User
+from django.utils import timezone
 from .models import Message, Notification, MessageHistory
 
 @receiver(post_save, sender=Message)
@@ -31,6 +32,11 @@ def log_message_edit(sender, instance, **kwargs):
                     old_content=old_message.content
                 )
                 instance.edited = True
+                instance.edited_at = timezone.now()
+                # Set edited_by if available in request context
+                # Note: In a real application, you'd get this from the request
+                # For now, we'll set it to the sender
+                instance.edited_by = instance.sender
         except Message.DoesNotExist:
             pass
 

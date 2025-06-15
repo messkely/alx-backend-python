@@ -3,10 +3,15 @@ from .models import Message, Notification, MessageHistory
 
 @admin.register(Message)
 class MessageAdmin(admin.ModelAdmin):
-    list_display = ('sender', 'receiver', 'content', 'timestamp', 'edited', 'read')
+    list_display = ('sender', 'receiver', 'content', 'timestamp', 'edited', 'edited_by', 'read')
     list_filter = ('timestamp', 'edited', 'read')
     search_fields = ('sender__username', 'receiver__username', 'content')
-    readonly_fields = ('timestamp',)
+    readonly_fields = ('timestamp', 'edited_at')
+    
+    def get_readonly_fields(self, request, obj=None):
+        if obj:  # Editing an existing object
+            return self.readonly_fields + ('sender', 'receiver')
+        return self.readonly_fields
 
 @admin.register(Notification)
 class NotificationAdmin(admin.ModelAdmin):
