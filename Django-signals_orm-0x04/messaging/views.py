@@ -192,3 +192,20 @@ def delete_user(request):
     messages.success(request, f"Account '{username}' has been successfully deleted.")
     return redirect('home')
 
+@login_required
+def unread_messages(request):
+    """
+    View to return only unread messages for the user
+    """
+    unread_messages = Message.unread.unread_for_user(request.user)
+    paginator = Paginator(unread_messages, 20)
+    page_number = request.GET.get('page')
+    messages_page = paginator.get_page(page_number)
+
+    context = {
+        'messages': messages_page,
+        'message_count': unread_messages.count(),
+    }
+    return render(request, 'messaging/unread.html', context)
+
+
