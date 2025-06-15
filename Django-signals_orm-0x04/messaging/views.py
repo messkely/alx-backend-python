@@ -9,6 +9,7 @@ from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
 from django.views import View
 import json
 from .models import Message, Notification
@@ -18,7 +19,6 @@ def inbox(request):
     """
     View to display inbox messages with optimized queries
     """
-    # Optimize query with select_related and prefetch_related
     messages_list = Message.objects.filter(
         receiver=request.user
     ).select_related(
@@ -30,7 +30,6 @@ def inbox(request):
         )
     ).order_by('-timestamp')
     
-    # Pagination
     paginator = Paginator(messages_list, 20)
     page_number = request.GET.get('page')
     messages_page = paginator.get_page(page_number)
@@ -47,7 +46,6 @@ def sent_messages(request):
     """
     View to display sent messages with optimized queries
     """
-    # Optimize query for sent messages
     messages_list = Message.objects.filter(
         sender=request.user
     ).select_related(
@@ -59,7 +57,6 @@ def sent_messages(request):
         )
     ).order_by('-timestamp')
     
-    # Pagination
     paginator = Paginator(messages_list, 20)
     page_number = request.GET.get('page')
     messages_page = paginator.get_page(page_number)
@@ -70,6 +67,7 @@ def sent_messages(request):
     }
     return render(request, 'messaging/sent.html', context)
 
+@cache_page(60)
 @login_required
 def conversation_detail(request, user_id):
     """
@@ -77,7 +75,6 @@ def conversation_detail(request, user_id):
     """
     other_user = get_object_or_404(User, id=user_id)
     
-    # Optimized query for conversation messages
     messages_list = Message.objects.filter(
         Q(sender=request.user, receiver=other_user) |
         Q(sender=other_user, receiver=request.user)
@@ -90,14 +87,12 @@ def conversation_detail(request, user_id):
         )
     ).order_by('timestamp')
     
-    # Mark messages as read
     Message.objects.filter(
         sender=other_user, 
         receiver=request.user, 
         read=False
     ).update(read=True)
     
-    # Pagination
     paginator = Paginator(messages_list, 50)
     page_number = request.GET.get('page')
     messages_page = paginator.get_page(page_number)
@@ -114,14 +109,12 @@ def notifications(request):
     """
     View to display user notifications with optimized queries
     """
-    # Optimize notifications query
     notifications_list = Notification.objects.filter(
         user=request.user
     ).select_related(
         'user', 'message__sender', 'message__receiver'
     ).order_by('-timestamp')
     
-    # Pagination
     paginator = Paginator(notifications_list, 25)
     page_number = request.GET.get('page')
     notifications_page = paginator.get_page(page_number)
@@ -142,7 +135,6 @@ def message_thread(request, message_id):
         id=message_id
     )
     
-    # Get all messages in the thread with optimized queries
     thread_messages = Message.objects.filter(
         Q(parent_message=root_message) | Q(id=root_message.id)
     ).select_related(
@@ -187,8 +179,8 @@ def delete_user(request):
     """
     user = request.user
     username = user.username
-    logout(request)  # Log out the user first
-    user.delete()  # This will trigger the post_delete signal
+    logout(request)
+    user.delete()
     messages.success(request, f"Account '{username}' has been successfully deleted.")
     return redirect('home')
 
@@ -207,5 +199,3 @@ def unread_messages(request):
         'message_count': unread_messages.count(),
     }
     return render(request, 'messaging/unread.html', context)
-
-
