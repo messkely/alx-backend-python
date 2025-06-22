@@ -1,0 +1,95 @@
+{
+	"info": {
+		"_postman_id": "9be2ce8a-fabf-4191-81a5-d738f5bd1035",
+		"name": "Messaging App API",
+		"description": "“Collection for testing JWT login, conversations, and messages in ALX messaging app.”",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "45700084",
+		"_collection_link": "https://gatlatboth.postman.co/workspace/Gatlat-Both's-Workspace~4c4d5e10-8533-40f8-8bdc-1af1b38a2dbd/collection/45700084-9be2ce8a-fabf-4191-81a5-d738f5bd1035?action=share&source=collection_link&creator=45700084"
+	},
+	"item": [
+		{
+			"name": "Login - Obtain JWT",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"// Parse the JSON response\r",
+							"var jsonData = pm.response.json();\r",
+							"\r",
+							"// Save the access token to an environment variable named \"jwt_token\"\r",
+							"pm.environment.set(\"jwt_token\", jsonData.access);\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n  \"username\": \"admin\",\r\n  \"password\": \"Gbuom@2025\"\r\n}\r\n",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/api/token/",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"token",
+						""
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Create Conversation",
+			"request": {
+				"method": "GET",
+				"header": []
+			},
+			"response": []
+		},
+		{
+			"name": "Send Message",
+			"request": {
+				"method": "GET",
+				"header": []
+			},
+			"response": []
+		},
+		{
+			"name": "List Conversations",
+			"request": {
+				"method": "GET",
+				"header": []
+			},
+			"response": []
+		},
+		{
+			"name": "List Messages in a Conversation",
+			"request": {
+				"method": "GET",
+				"header": []
+			},
+			"response": []
+		}
+	]
+}
