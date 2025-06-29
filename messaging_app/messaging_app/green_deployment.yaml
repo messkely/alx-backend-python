@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: django-messaging-app-green
+  labels:
+    app: django-messaging-app
+    version: green
+    environment: production
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: django-messaging-app
+      version: green
+  template:
+    metadata:
+      labels:
+        app: django-messaging-app
+        version: green
+        environment: production
+    spec:
+      containers:
+      - name: django-app
+        image: django-messaging-app:1.1
+        ports:
+        - containerPort: 8000
+        env:
+        - name: DJANGO_SETTINGS_MODULE
+          value: "messaging_app.settings"
+        - name: DEBUG
+          value: "False"
+        - name: VERSION
+          value: "green-1.1"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health/
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health/
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
