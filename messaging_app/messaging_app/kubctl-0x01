@@ -1,0 +1,78 @@
+#!/bin/bash
+
+# kubctl-0x01 - Scale Django app and perform load testing
+# This script scales the Django app to 3 replicas and tests performance
+
+echo "📈 Scaling Django messaging app..."
+
+# Scale the deployment to 3 replicas
+echo "🔄 Scaling deployment to 3 replicas..."
+kubectl scale deployment django-messaging-app --replicas=3
+
+# Wait for pods to be ready
+echo "⏳ Waiting for pods to be ready..."
+kubectl wait --for=condition=Ready pod -l app=django-messaging-app --timeout=300s
+
+# Verify multiple pods are running
+echo "📦 Current pods status:"
+kubectl get pods -l app=django-messaging-app
+
+# Get deployment status
+echo "📊 Deployment status:"
+kubectl get deployment django-messaging-app
+
+# Check if wrk is installed for load testing
+if command -v wrk &> /dev/null; then
+    echo "🚀 Starting load testing with wrk..."
+    
+    # Get the service ClusterIP for internal testing
+    SERVICE_IP=$(kubectl get service django-messaging-service -o jsonpath='{.spec.clusterIP}')
+    echo "Service IP: $SERVICE_IP"
+    
+    # Port forward to access the service locally for testing
+    echo "🔗 Setting up port forwarding..."
+    kubectl port-forward service/django-messaging-service 8080:80 &
+    PORT_FORWARD_PID=$!
+    
+    # Wait for port forward to establish
+    sleep 5
+    
+    # Run load test
+    echo "🔥 Running load test for 30 seconds with 4 threads and 12 connections..."
+    wrk -t4 -c12 -d30s http://localhost:8080/
+    
+    # Kill port forward process
+    kill $PORT_FORWARD_PID 2>/dev/null || true
+    
+else
+    echo "⚠️  wrk not found. Installing wrk..."
+    # Instructions for different OS
+    echo "Please install wrk:"
+    echo "Ubuntu/Debian: sudo apt-get install wrk"
+    echo "macOS: brew install wrk"
+    echo "Manual: https://github.com/wg/wrk"
+fi
+
+# Monitor resource usage (requires metrics-server)
+echo "📊 Monitoring resource usage..."
+if kubectl top nodes &>/dev/null; then
+    echo "Node resource usage:"
+    kubectl top nodes
+    
+    echo "Pod resource usage:"
+    kubectl top pods -l app=django-messaging-app
+else
+    echo "⚠️  Metrics server not available. Resource usage monitoring skipped."
+    echo "To enable metrics, run: minikube addons enable metrics-server"
+fi
+
+# Show detailed pod information
+echo "📋 Detailed pod information:"
+kubectl describe pods -l app=django-messaging-app
+
+# Show service endpoints
+echo "🔗 Service endpoints:"
+kubectl get endpoints django-messaging-service
+
+echo "✅ Scaling and load testing complete!"
+echo "💡 Your Django app is now running with 3 replicas"

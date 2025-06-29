@@ -1,0 +1,168 @@
+#!/bin/bash
+
+# kubctl-0x03 - Rolling Update Script
+# This script performs a rolling update and monitors for downtime
+
+echo "🔄 Starting Rolling Update Process..."
+
+# Configuration
+DEPLOYMENT_NAME="django-messaging-app-blue"
+SERVICE_NAME="django-messaging-service-blue"
+NEW_IMAGE="django-messaging-app:2.0"
+TEST_INTERVAL=2
+TOTAL_TEST_DURATION=120
+
+# Function to test app availability
+test_app_availability() {
+    if curl -s -f http://localhost:8080/health/ > /dev/null 2>&1; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Function to continuously test the app
+continuous_test() {
+    local test_count=0
+    local success_count=0
+    local failure_count=0
+    local start_time=$(date +%s)
+    
+    echo "🧪 Starting continuous availability testing..."
+    
+    while [ $(($(date +%s) - start_time)) -lt $TOTAL_TEST_DURATION ]; do
+        test_count=$((test_count + 1))
+        
+        if test_app_availability; then
+            success_count=$((success_count + 1))
+            echo "✅ Test $test_count: SUCCESS ($(date +%T))"
+        else
+            failure_count=$((failure_count + 1))
+            echo "❌ Test $test_count: FAILED ($(date +%T))"
+        fi
+        
+        sleep $TEST_INTERVAL
+    done
+    
+    echo "📊 Test Results:"
+    echo "   Total tests: $test_count"
+    echo "   Successful: $success_count"
+    echo "   Failed: $failure_count"
+    echo "   Success rate: $(( success_count * 100 / test_count ))%"
+    
+    if [ $failure_count -eq 0 ]; then
+        echo "🎉 No downtime detected during rolling update!"
+    else
+        echo "⚠️  Detected $failure_count failures during rolling update"
+    fi
+}
+
+# Check if deployment exists
+if ! kubectl get deployment $DEPLOYMENT_NAME > /dev/null 2>&1; then
+    echo "❌ Deployment $DEPLOYMENT_NAME not found. Creating it first..."
+    kubectl apply -f blue_deployment.yaml
+    kubectl rollout status deployment/$DEPLOYMENT_NAME --timeout=300s
+fi
+
+# Get current image
+CURRENT_IMAGE=$(kubectl get deployment $DEPLOYMENT_NAME -o jsonpath='{.spec.template.spec.containers[0].image}')
+echo "🔍 Current image: $CURRENT_IMAGE"
+echo "🆕 New image: $NEW_IMAGE"
+
+# Set up port forwarding for testing
+echo "🔗 Setting up port forwarding..."
+kubectl port-forward service/$SERVICE_NAME 8080:80 &
+PORT_FORWARD_PID=$!
+
+# Wait for port forward to establish
+sleep 5
+
+# Test initial connectivity
+echo "🧪 Testing initial connectivity..."
+if test_app_availability; then
+    echo "✅ App is initially accessible"
+else
+    echo "❌ App is not initially accessible"
+    kill $PORT_FORWARD_PID 2>/dev/null || true
+    exit 1
+fi
+
+# Start continuous testing in background
+continuous_test &
+TEST_PID=$!
+
+# Apply the rolling update
+echo "🚀 Starting rolling update..."
+kubectl set image deployment/$DEPLOYMENT_NAME django-app=$NEW_IMAGE
+
+# Monitor the rollout progress
+echo "👀 Monitoring rollout progress..."
+kubectl rollout status deployment/$DEPLOYMENT_NAME --timeout=300s
+
+if [ $? -eq 0 ]; then
+    echo "✅ Rolling update completed successfully"
+else
+    echo "❌ Rolling update failed or timed out"
+    kill $TEST_PID 2>/dev/null || true
+    kill $PORT_FORWARD_PID 2>/dev/null || true
+    exit 1
+fi
+
+# Wait for continuous testing to complete
+echo "⏳ Waiting for continuous testing to complete..."
+wait $TEST_PID
+
+# Verify the rolling update is complete
+echo "🔍 Verifying rolling update completion..."
+
+# Check deployment status
+echo "📊 Deployment status:"
+kubectl get deployment $DEPLOYMENT_NAME
+
+# Check rollout history
+echo "📜 Rollout history:"
+kubectl rollout history deployment/$DEPLOYMENT_NAME
+
+# Verify all pods are running new image
+echo "🔍 Verifying pod images:"
+kubectl get pods -l app=django-messaging-app,version=blue -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
+
+# Check current pods
+echo "📦 Current pods:"
+kubectl get pods -l app=django-messaging-app,version=blue -o wide
+
+# Verify new image is deployed
+UPDATED_IMAGE=$(kubectl get deployment $DEPLOYMENT_NAME -o jsonpath='{.spec.template.spec.containers[0].image}')
+echo "🔍 Updated image: $UPDATED_IMAGE"
+
+if [ "$UPDATED_IMAGE" = "$NEW_IMAGE" ]; then
+    echo "✅ Image update verified successfully"
+else
+    echo "❌ Image update verification failed"
+fi
+
+# Final app test
+echo "🧪 Final app connectivity test..."
+if test_app_availability; then
+    echo "✅ App is accessible after rolling update"
+else
+    echo "❌ App is not accessible after rolling update"
+fi
+
+# Cleanup
+kill $PORT_FORWARD_PID 2>/dev/null || true
+
+# Display resource usage if metrics are available
+echo "📊 Resource usage after update:"
+if kubectl top pods -l app=django-messaging-app,version=blue &>/dev/null; then
+    kubectl top pods -l app=django-messaging-app,version=blue
+else
+    echo "⚠️  Metrics not available (enable with: minikube addons enable metrics-server)"
+fi
+
+# Show events related to the deployment
+echo "📋 Recent deployment events:"
+kubectl get events --sort-by=.metadata.creationTimestamp --field-selector involvedObject.name=$DEPLOYMENT_NAME
+
+echo "✅ Rolling update process completed!"
+echo "💡 Use 'kubectl rollout undo deployment/$DEPLOYMENT_NAME' to rollback if needed"

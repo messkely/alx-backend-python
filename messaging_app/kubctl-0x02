@@ -1,0 +1,129 @@
+#!/bin/bash
+
+# kubctl-0x02 - Blue-Green Deployment Script
+# This script deploys both blue and green versions and manages traffic switching
+
+echo "🔄 Starting Blue-Green Deployment Process..."
+
+# Function to check pod health
+check_pod_health() {
+    local version=$1
+    echo "🏥 Checking health of $version pods..."
+    
+    # Wait for pods to be ready
+    kubectl wait --for=condition=Ready pod -l version=$version --timeout=300s
+    
+    # Check logs for errors
+    echo "📋 Checking logs for $version version..."
+    kubectl logs -l version=$version --tail=50 | grep -i error || echo "✅ No errors found in $version logs"
+    
+    return 0
+}
+
+# Function to switch traffic
+switch_traffic() {
+    local target_version=$1
+    echo "🔀 Switching traffic to $target_version version..."
+    
+    # Update the active service selector
+    kubectl patch service django-messaging-service-active -p '{"spec":{"selector":{"version":"'$target_version'"}}}'
+    
+    echo "✅ Traffic switched to $target_version version"
+}
+
+# Deploy Blue version
+echo "🔵 Deploying Blue version..."
+kubectl apply -f blue_deployment.yaml
+
+# Deploy Green version
+echo "🟢 Deploying Green version..."
+kubectl apply -f green_deployment.yaml
+
+# Apply services
+echo "🔗 Setting up services..."
+kubectl apply -f kubeservice.yaml
+
+# Wait for deployments to be ready
+echo "⏳ Waiting for Blue deployment to be ready..."
+kubectl rollout status deployment/django-messaging-app-blue --timeout=300s
+
+echo "⏳ Waiting for Green deployment to be ready..."
+kubectl rollout status deployment/django-messaging-app-green --timeout=300s
+
+# Check health of both versions
+check_pod_health "blue"
+check_pod_health "green"
+
+# Show current pod status
+echo "📦 Current pod status:"
+kubectl get pods -l app=django-messaging-app -o wide
+
+# Show deployment status
+echo "📊 Deployment status:"
+kubectl get deployments -l app=django-messaging-app
+
+# Show service status
+echo "🔗 Service status:"
+kubectl get services -l app=django-messaging-app
+
+# Test both versions if possible
+echo "🧪 Testing both versions..."
+
+# Port forward to test blue version
+echo "🔵 Testing Blue version..."
+kubectl port-forward service/django-messaging-service-blue 8081:80 &
+BLUE_PID=$!
+sleep 3
+
+if curl -s http://localhost:8081/health/ > /dev/null; then
+    echo "✅ Blue version is responding"
+else
+    echo "❌ Blue version is not responding"
+fi
+
+kill $BLUE_PID 2>/dev/null || true
+
+# Port forward to test green version
+echo "🟢 Testing Green version..."
+kubectl port-forward service/django-messaging-service-green 8082:80 &
+GREEN_PID=$!
+sleep 3
+
+if curl -s http://localhost:8082/health/ > /dev/null; then
+    echo "✅ Green version is responding"
+else
+    echo "❌ Green version is not responding"
+fi
+
+kill $GREEN_PID 2>/dev/null || true
+
+# Interactive traffic switching
+echo "🔀 Current active version: $(kubectl get service django-messaging-service-active -o jsonpath='{.spec.selector.version}')"
+
+read -p "Do you want to switch traffic to Green version? (y/n): " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    switch_traffic "green"
+    
+    # Verify the switch
+    echo "🔍 Verifying traffic switch..."
+    kubectl port-forward service/django-messaging-service-active 8083:80 &
+    ACTIVE_PID=$!
+    sleep 3
+    
+    if curl -s http://localhost:8083/health/ > /dev/null; then
+        echo "✅ Active service is responding after switch"
+    else
+        echo "❌ Active service is not responding after switch"
+    fi
+    
+    kill $ACTIVE_PID 2>/dev/null || true
+fi
+
+# Final status check
+echo "📋 Final deployment status:"
+kubectl get all -l app=django-messaging-app
+
+echo "✅ Blue-Green deployment process complete!"
+echo "💡 Use 'kubectl get pods -l app=django-messaging-app' to monitor your deployments"
+echo "💡 Use the switch_traffic function in this script to change between versions"
