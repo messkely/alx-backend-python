@@ -24,8 +24,8 @@ pipeline {
                     cd messaging_app
                     python3 -m venv venv
                     . venv/bin/activate
-                    pip install --upgrade pip
-                    pip install -r requirements.txt
+                    pip3 install --upgrade pip
+                    pip3 install -r messaging_app/requirements.txt
                 '''
             }
         }
@@ -36,7 +36,8 @@ pipeline {
                 sh '''
                     cd messaging_app
                     . venv/bin/activate
-                    pip install pytest pytest-django pytest-cov flake8
+                    pip3 install -r messaging_app/requirements.txt
+                    pip3 install pytest pytest-django pytest-cov flake8
                 '''
             }
         }
