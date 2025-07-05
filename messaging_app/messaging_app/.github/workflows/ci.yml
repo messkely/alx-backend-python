@@ -1,0 +1,132 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: rootpassword
+          MYSQL_DATABASE: test_messaging_app
+          MYSQL_USER: testuser
+          MYSQL_PASSWORD: testpass
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        cd messaging_app
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-django pytest-cov flake8 mysqlclient
+    
+    - name: Wait for MySQL
+      run: |
+        while ! mysqladmin ping -h"127.0.0.1" -P3306 -uroot -prootpassword --silent; do
+          echo "Waiting for MySQL..."
+          sleep 1
+        done
+    
+    - name: Set up test database
+      run: |
+        mysql -h 127.0.0.1 -P 3306 -u root -prootpassword -e "CREATE DATABASE IF NOT EXISTS test_messaging_app;"
+        mysql -h 127.0.0.1 -P 3306 -u root -prootpassword -e "GRANT ALL PRIVILEGES ON test_messaging_app.* TO 'testuser'@'%';"
+        mysql -h 127.0.0.1 -P 3306 -u root -prootpassword -e "FLUSH PRIVILEGES;"
+    
+    - name: Run migrations
+      run: |
+        cd messaging_app
+        export DJANGO_SETTINGS_MODULE=messaging_app.settings.test
+        python manage.py migrate --settings=messaging_app.settings.test
+      env:
+        DB_HOST: 127.0.0.1
+        DB_PORT: 3306
+        DB_NAME: test_messaging_app
+        DB_USER: testuser
+        DB_PASSWORD: testpass
+    
+    - name: Run flake8 linting
+      run: |
+        cd messaging_app
+        # Stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # Exit-zero treats all errors as warnings
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    
+    - name: Run Django tests
+      run: |
+        cd messaging_app
+        export DJANGO_SETTINGS_MODULE=messaging_app.settings.test
+        python manage.py test --verbosity=2
+      env:
+        DB_HOST: 127.0.0.1
+        DB_PORT: 3306
+        DB_NAME: test_messaging_app
+        DB_USER: testuser
+        DB_PASSWORD: testpass
+    
+    - name: Run pytest with coverage
+      run: |
+        cd messaging_app
+        export DJANGO_SETTINGS_MODULE=messaging_app.settings.test
+        pytest --junitxml=test-results.xml --cov=. --cov-report=xml --cov-report=html --cov-report=term-missing
+      env:
+        DB_HOST: 127.0.0.1
+        DB_PORT: 3306
+        DB_NAME: test_messaging_app
+        DB_USER: testuser
+        DB_PASSWORD: testpass
+    
+    - name: Upload coverage reports to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./messaging_app/coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+    
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results
+        path: messaging_app/test-results.xml
+    
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: coverage-report
+        path: messaging_app/htmlcov/
+    
+    - name: Upload coverage XML
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: coverage-xml
+        path: messaging_app/coverage.xml
